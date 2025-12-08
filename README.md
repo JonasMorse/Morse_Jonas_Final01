@@ -66,7 +66,7 @@ N/A
 
 
 
-GitHub Link: JonasMorse/Morse_Jonas_Final01: StillWater RPG is a text-based fantasy role-playing game inspired by a book I have been working on titled *StillWater*.
+GitHub Link: https://github.com/JonasMorse/Morse_Jonas_Final01
 
 Youtube Link: https://youtu.be/eHU6oZVw4lc
 
