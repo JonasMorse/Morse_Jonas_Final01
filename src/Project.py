@@ -1,5 +1,6 @@
 """
 StillWater RPG
+
 """
 
 import random
@@ -42,7 +43,6 @@ def prompt_choice(prompt, options):
 
 # -------------------------
 # Visuals & ASCII Art
-# -------------------------
 def show_camp_map():
     print("""
     STILLWATER CAMP MAP
@@ -191,6 +191,7 @@ camp_locations = {
 
 # -------------------------
 # Enemies
+
 enemies = [
     {"name":"Wild Scavenger","level":(1,3),"hp_base":20},
     {"name":"Feral Miner","level":(3,5),"hp_base":30},
@@ -218,9 +219,8 @@ player = {
     "boss_defeated":False
 }
 
-
 # -------------------------
-# Combat math 
+# Combat math
 
 def calculate_damage(attacker_stats, defender_stats, base, damage_type="physical"):
     """
@@ -300,11 +300,6 @@ def create_character():
 
     slow_print(f"\n{player['name']} — {player['class']} joined the ranks.")
     player_art()
-    short_pause(0.8)
-
-    slow_print(f"\n{player['name']} — {player['class']} joined the ranks.")
-    player_art()
-    short_pause(0.8)
     short_pause(0.8)
 
 # -------------------------
@@ -719,3 +714,171 @@ def boss_fight():
     player["hp"] = max(1, player_hp)
     gain_xp(100 + player["level"]*10)
     return True
+# -------------------------
+# Final Escape
+def final_escape_story():
+    divider()
+    slow_print("*** FINAL ESCAPE INITIATED ***", 0.02)
+
+    if "Jori" not in player["party"] and not player["boss_defeated"]:
+        slow_print("You cannot pull a successful escape alone. Recruit Jori or weaken the Warden first.")
+        return
+
+    slow_print("You and your allies press toward the main gate.")
+    if player["boss_defeated"]:
+        slow_print("With the Warden down, the guards are in disarray. Your chances are high.")
+    else:
+        slow_print("With Jori's quick thinking, you find a narrow window to flee.")
+
+    print("\nEscape routes:")
+    print("1. Dark Forest — agility based")
+    print("2. River Crossing — endurance based")
+    print("3. Sentry Passage — stealth/party based")
+    choice = prompt_choice("> ", ["1","2","3"])
+    base_roll = random.randint(1,20)
+    success = False
+
+    if choice == "1":  # agility
+        threshold = player["stats"]["agility"] + (5 if "Jori" in player["party"] else 0)
+        success = base_roll <= threshold or player["boss_defeated"]
+    elif choice == "2":  # endurance
+        threshold = player["stats"]["endurance"] + (3 if player["level"] >= 5 else 0)
+        success = base_roll <= threshold or player["boss_defeated"]
+    elif choice == "3":
+        party_factor = len(player["party"]) * 4
+        threshold = player["stats"]["intelligence"] + party_factor
+        success = base_roll <= threshold or player["boss_defeated"]
+
+    if success:
+        slow_print("\nYou slip through the chaos and vanish into the storm. Freedom, for now.")
+        victory_visual()
+        slow_print("CONGRATULATIONS — You escaped the camp.")
+        sys.exit(0)
+    else:
+        slow_print("\nYour escape attempt is foiled. The guards swarm. Game Over.")
+        defeat_visual()
+        sys.exit(0)
+
+# -------------------------
+# Cheat / Debug Menu
+
+def cheat_box():
+    divider()
+    print("CHEAT MENU")
+    print("1. Increase stat")
+    print("2. Set level")
+    print("3. Heal to full")
+    print("4. Add Jori to party")
+    print("5. Add XP")
+    print("6. Back")
+    choice = prompt_choice("> ", ["1","2","3","4","5","6"])
+    if choice == "1":
+        stat = input("Stat to increase (strength/agility/intelligence/endurance/willpower/luck): ").strip()
+        if stat in player["stats"]:
+            try:
+                amt = int(input("Amount: ").strip())
+            except:
+                amt = 1
+            player["stats"][stat] += amt
+            slow_print(f"{stat} increased by {amt}.")
+        else:
+            slow_print("Unknown stat.")
+    elif choice == "2":
+        try:
+            lvl = int(input("Set level to: ").strip())
+            player["level"] = max(1, lvl)
+        except:
+            pass
+        slow_print(f"Level set to {player['level']}.")
+    elif choice == "3":
+        player["hp"] = player["max_hp"]
+        slow_print("Healed to full.")
+    elif choice == "4":
+        if "Jori" not in player["party"]:
+            player["party"].append("Jori")
+            npcs["Jori"]["recruited"] = True
+            slow_print("Jori recruited.")
+        else:
+            slow_print("Jori is already in your party.")
+    elif choice == "5":
+        try:
+            xp = int(input("XP amount: ").strip())
+        except:
+            xp = 10
+        gain_xp(xp)
+    else:
+        return
+
+# -------------------------
+# Status / Display
+
+def view_stats():
+    divider()
+    print(f"Name: {player['name']}")
+    print(f"Class: {player['class']}")
+    print(f"Level: {player['level']}  XP: {player['xp']}/{player['level']*20}")
+    print(f"HP: {player['hp']}/{player['max_hp']}  Attack: {player['attack']}  Defense: {player['defense']}")
+    print("Stats:", ", ".join([f"{k}: {v}" for k,v in player["stats"].items()]))
+    print("Abilities:", ", ".join(player["abilities"]))
+    if player["party"]:
+        print("Party:", ", ".join(player["party"]))
+    else:
+        print("Party: None")
+    divider()
+
+# -------------------------
+# Main Menu & Loop
+def main():
+    clear_screen()
+    slow_print("STILLWATER — A Text RPG\n", 0.02)
+    create_character()
+
+    while True:
+        divider()
+        print("=== CAMP MENU ===")
+        print("1. Explore Camp")
+        print("2. Train")
+        print("3. Check Stats / Party")
+        print("4. Battle (Encounter)")
+        print("5. Boss Fight — The Warden")
+        print("6. Attempt Final Escape")
+        print("7. Cheat / Debug")
+        print("8. Quick Save")
+        print("9. Quit Game")
+        divider()
+        choice = input("Choose an action: ").strip()
+
+        if choice == "1":
+            explore_camp()
+        elif choice == "2":
+            training_session()
+        elif choice == "3":
+            view_stats()
+        elif choice == "4":
+            won = battle_scaled()
+            if not won:
+                slow_print("You were defeated... recover and try again.")
+                if player["hp"] <= 0:
+                    slow_print("You awaken hours later with guards watching. Healed to minimal life.")
+                    player["hp"] = max(1, int(player["max_hp"]/4))
+        elif choice == "5":
+            if player["level"] < 3:
+                slow_print("The Warden is too powerful for you at your current level. Train more.")
+            else:
+                boss_won = boss_fight()
+                if boss_won:
+                    slow_print("The camp trembles — use 'Attempt Final Escape' while the gates are open.")
+        elif choice == "6":
+            final_escape_story()
+        elif choice == "7":
+            cheat_box()
+        elif choice == "8":
+            quick_save()
+        elif choice == "9":
+            slow_print("You fade into the smoke... Goodbye.")
+            break
+        else:
+            slow_print("Invalid choice.")
+
+if __name__ == "__main__":
+    main()
