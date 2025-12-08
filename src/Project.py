@@ -1,6 +1,5 @@
 """
-StillWater RPG — Full StillWater Version (Option B) — Stat-based Combat v2
-- Stats now meaningfully affect combat:
+StillWater RPG — Full StillWater Version
 
 """
 
