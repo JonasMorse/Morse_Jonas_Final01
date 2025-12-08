@@ -420,3 +420,302 @@ def generate_enemy(enemy_template, level):
         "luck": max(0, int(level * 0.3))
     }
     return {"name": enemy_template["name"], "level": level, "hp": base_hp, "max_hp": base_hp, "stats": stats}
+
+# -------------------------
+# Battle Systems
+def battle_scaled():
+    """Scaled encounter selected from enemies depending on player level."""
+    lvl = player["level"]
+    if lvl < 3:
+        pool = [e for e in enemies if e["level"][1] <= 3]
+    elif lvl < 7:
+        pool = [e for e in enemies if e["level"][1] <= 7]
+    else:
+        pool = enemies
+    enemy_template = random.choice(pool)
+    enemy_level = max(enemy_template["level"][0], min(enemy_template["level"][1], random.randint(enemy_template["level"][0], enemy_template["level"][1])))
+    enemy = generate_enemy(enemy_template, enemy_level)
+    return enhanced_battle(enemy=enemy)
+
+def enhanced_battle(enemy=None, enemy_level=None, base_hp=None):
+    """
+    Enhanced battle: visual, abilities, party support.
+    If enemy dict provided, uses it. Otherwise creates generic enemy.
+    Returns True if player wins, False if player dies or escapes.
+    """
+    # Create enemy if not provided
+    if enemy is None:
+        # generic enemy generation
+        template = random.choice(enemies)
+        lvl = enemy_level or player["level"]
+        enemy = generate_enemy(template, lvl)
+
+    enemy_name = enemy["name"]
+    enemy_hp = enemy["hp"]
+    player_hp = player["hp"]
+
+    battle_intro(enemy_name)
+    short_pause(0.2)
+
+    turn = 1
+    defend = False
+    while enemy_hp > 0 and player_hp > 0:
+        divider()
+        print(f"Turn {turn} — {player['name']} (HP: {player_hp}/{player['max_hp']}) vs {enemy_name} (HP: {enemy_hp}/{enemy['max_hp']})")
+        print(hp_bar(player_hp, player["max_hp"]), "  ", hp_bar(enemy_hp, enemy["max_hp"]))
+        short_pause(0.2)
+
+        # Player action
+        print("\nActions:")
+        print("1. Basic Attack")
+        print("2. Use Ability")
+        print("3. Defend")
+        print("4. Attempt Flee")
+        action = prompt_choice("> ", ["1","2","3","4"])
+
+        if action == "1":
+            # Basic physical attack base scales with player attack stat
+            base = max(4, player["attack"])
+            damage, crit, dodged = calculate_damage(player["stats"], enemy["stats"], base, damage_type="physical")
+            if dodged:
+                slow_print("The enemy nimbly dodged your blow!")
+            else:
+                player_message = f"You strike for {damage} damage"
+                if crit: player_message += " (CRIT!)"
+                player_message += "."
+                slow_print(player_message)
+                enemy_hp -= damage
+        elif action == "2":
+            if not player["abilities"]:
+                slow_print("You have no abilities. You fumble.")
+            else:
+                print("Abilities:")
+                for i, a in enumerate(player["abilities"],1):
+                    print(f"{i}. {a} — {ability_effects.get(a, {}).get('desc','')}")
+                sel = input("Choose ability number: ").strip()
+                if sel.isdigit() and 1 <= int(sel) <= len(player["abilities"]):
+                    a = player["abilities"][int(sel)-1]
+                    # base for abilities uses willpower scaling
+                    ability_base = max(3, player["attack"]//2 + player["stats"].get("willpower", 0))
+                    mult = ability_effects.get(a, {}).get("damage", 1.0)
+                    damage, crit, dodged = calculate_damage(player["stats"], enemy["stats"], int(ability_base * mult), damage_type="special")
+                    if dodged:
+                        slow_print("The enemy dodged your ability!")
+                    else:
+                        if ability_effects.get(a, {}).get("multi") and random.random() < 0.35:
+                            extra = int(damage * 0.4)
+                            slow_print("It fragments into multiple strikes!")
+                            damage += extra
+                        slow_print(f"You use {a}, dealing {damage} damage!" + (" (CRIT!)" if crit else ""))
+                        enemy_hp -= damage
+                        # small special: stun chance
+                        if ability_effects.get(a, {}).get("stun") and random.random() < ability_effects[a]["stun"]:
+                            slow_print("You stagger the enemy! They may miss a turn.")
+                            enemy["stunned"] = True
+                else:
+                    slow_print("You hesitate and lose your chance.")
+        elif action == "3":
+            slow_print("You brace for impact, reducing incoming damage this turn.")
+            defend = True
+        elif action == "4":
+            if random.random() < 0.45:
+                slow_print("You slip away successfully.")
+                player["hp"] = player_hp
+                return False  # escaped
+            else:
+                slow_print("You fail to escape!")
+
+        # Party support
+        if player["party"]:
+            for member in player["party"]:
+                pd_base = 2 + random.randint(0,4)
+                # party member damage can be scaled slightly by player's level
+                pd = pd_base + int(player["level"]/2)
+                slow_print(f"{member} assists for {pd} damage!")
+                enemy_hp -= pd
+
+        if enemy_hp <= 0:
+            victory_visual()
+            gain_xp(enemy["level"] * 6)
+            player["hp"] = min(player["max_hp"], player_hp)
+            return True
+
+        # Enemy turn
+        slow_print(f"\n{enemy_name} prepares to strike!")
+        # handle enemy stunned flag
+        if enemy.get("stunned", False):
+            slow_print(f"{enemy_name} is stunned and cannot act!")
+            enemy["stunned"] = False
+        else:
+            # enemy uses physical attack base scaled by their strength
+            base_enemy = max(3, enemy["stats"].get("strength", 1) + enemy["level"])
+            damage, crit, dodged = calculate_damage(enemy["stats"], player["stats"], base_enemy, damage_type="physical")
+            if dodged:
+                slow_print("You nimbly dodge the enemy's attack!")
+            else:
+                # if player defended, reduce damage by half roughly
+                if defend:
+                    damage = max(1, int(damage * 0.5))
+                    defend = False
+                slow_print(f"You take {damage} damage!" + (" (CRIT!)" if crit else ""))
+                player_hp -= damage
+
+            # enemy may have small special chance to apply pressure (flavor)
+            if random.random() < 0.05 and enemy["level"] > 3:
+                slow_print(f"{enemy_name} pushes you, you feel drained (-1 endurance).")
+                player["stats"]["endurance"] = max(0, player["stats"]["endurance"] - 1)
+
+        if player_hp <= 0:
+            defeat_visual()
+            player["hp"] = 0
+            return False
+
+        turn += 1
+        short_pause(0.25)
+
+    player["hp"] = player_hp
+    return player["hp"] > 0
+
+def battle_intro(enemy_name):
+    divider()
+    print(rf"""
+      ⚔️  BATTLE COMMENCES ⚔️
+    Enemy: {enemy_name}
+    """)
+    time.sleep(0.25)
+
+# -------------------------
+# Boss Fight — The Warden
+def boss_fight():
+    clear_screen()
+    slow_print("You approach the final gate... thunder breaks like bone.")
+    warden_visual()
+    slow_print('\nA booming voice: "Vera... you were never meant to be free."', 0.03)
+    input("\nPress Enter to defy him...")
+
+    # Boss stats scale with player level
+    base_warden_hp = 220 + player["level"] * 2
+    warden = {
+        "name": "The Warden",
+        "level": max(3, player["level"] + 1),
+        "hp": base_warden_hp,
+        "max_hp": base_warden_hp,
+        # boss stats: big strength/endurance, moderate agility, moderate willpower
+        "stats": {"strength": 12 + player["level"]*1, "agility": 6 + player["level"], "endurance": 10 + player["level"], "willpower": 5 + player["level"]//2, "luck": 2}
+    }
+
+    warden_phase = 1
+    player_hp = player["hp"]
+    defend = False
+    stunned = False
+
+    slow_print("\nThe Warden charges, his glaive humming with crystal light.", 0.03)
+
+    while warden["hp"] > 0 and player_hp > 0:
+        divider()
+        print(f"You (HP: {player_hp}/{player['max_hp']})  |  {warden['name']} (HP: {warden['hp']}/{warden['max_hp']})  Phase: {warden_phase}")
+        print("1. Attack  2. Use Ability  3. Defend  4. Rally (party buff)")
+        choice = prompt_choice("> ", ["1","2","3","4"])
+
+        if choice == "1":
+            base = max(8, player["attack"] + player["stats"].get("strength",0)//2)
+            dmg, crit, dodged = calculate_damage(player["stats"], warden["stats"], base, damage_type="physical")
+            if dodged:
+                slow_print("The Warden evades your strike!")
+            else:
+                if warden_phase >= 2:
+                    # some armor effect at later phases
+                    dmg = max(1, int(dmg - (player["level"]/2)))
+                slow_print(f"You strike the Warden for {dmg} damage." + (" (CRIT!)" if crit else ""))
+                warden["hp"] -= dmg
+        elif choice == "2":
+            if not player["abilities"]:
+                slow_print("You have no abilities.")
+            else:
+                print("Abilities:")
+                for i, a in enumerate(player["abilities"],1):
+                    print(f"{i}. {a} — {ability_effects.get(a, {}).get('desc','')}")
+                sel = input("Choose ability number: ").strip()
+                if sel.isdigit() and 1 <= int(sel) <= len(player["abilities"]):
+                    a = player["abilities"][int(sel)-1]
+                    ability_base = max(6, player["attack"]//2 + player["stats"].get("willpower",0))
+                    mult = ability_effects.get(a, {}).get("damage", 1.0)
+                    dmg, crit, dodged = calculate_damage(player["stats"], warden["stats"], int(ability_base * mult), damage_type="special")
+                    if dodged:
+                        slow_print("The Warden shifts aside and avoids the strike!")
+                    else:
+                        if ability_effects.get(a, {}).get("multi") and random.random() < 0.35:
+                            slow_print("The strike fractures across his armor—multiple hits!")
+                            dmg += int(dmg * 0.35)
+                        slow_print(f"{a} deals {dmg} damage!" + (" (CRIT!)" if crit else ""))
+                        warden["hp"] -= dmg
+                        # stun check
+                        if ability_effects.get(a, {}).get("stun") and random.random() < ability_effects[a]["stun"]:
+                            slow_print("The Warden staggers! He'll likely miss his next strike.")
+                            stunned = True
+                else:
+                    slow_print("You fumble the attempt.")
+        elif choice == "3":
+            slow_print("You take a defensive stance.")
+            defend = True
+        elif choice == "4":
+            if player["party"]:
+                slow_print("You rally your allies. Their resolve bolsters you.")
+                for m in player["party"]:
+                    buff_amount = max(1, int(1 + player["level"]/3))
+                    player["attack"] += buff_amount
+                short_pause(0.4)
+            else:
+                slow_print("You have no allies to rally.")
+
+        # Phase transitions
+        max_hp = warden["max_hp"]
+        if warden["hp"] <= max_hp * 0.6 and warden_phase == 1:
+            slow_print("\nThe Warden's crystal plates glow — he moves more fiercely.")
+            warden_phase = 2
+            # armor augmentation in phase 2
+            warden["stats"]["endurance"] += 4 + player["level"]
+        if warden["hp"] <= max_hp * 0.25 and warden_phase == 2:
+            slow_print("\nThe Warden howls — the final surge begins.")
+            warden_phase = 3
+
+        # Warden's turn
+        if stunned:
+            slow_print("The Warden is stunned and flails helplessly!")
+            stunned = False
+        else:
+            # heavy attack
+            base_e = 14 + player["level"]
+            e_dmg, e_crit, e_dodged = calculate_damage(warden["stats"], player["stats"], base_e, damage_type="physical")
+            if e_dodged:
+                slow_print("You dodge the Warden's strike!")
+            else:
+                if defend:
+                    e_dmg = max(1, int(e_dmg * 0.5))
+                    defend = False
+                slow_print(f"The Warden hits you for {e_dmg} damage!" + (" (CRIT!)" if e_crit else ""))
+                player_hp -= e_dmg
+
+        # Phase 3 area attack
+        if warden_phase == 3 and random.random() < 0.35:
+            aoe_base = 12 + player["level"]*2
+            aoe_dmg, aoe_crit, aoe_dodged = calculate_damage(warden["stats"], player["stats"], aoe_base, damage_type="special")
+            if not aoe_dodged:
+                slow_print(f"A crystal storm batters you for {aoe_dmg} damage!")
+                player_hp -= aoe_dmg
+
+        if player_hp <= 0:
+            defeat_visual()
+            player["hp"] = 0
+            slow_print("The Warden's final blow closes your story.")
+            return False
+
+        short_pause(0.3)
+
+    # victory
+    slow_print("\nThe Warden collapses. The storm eases. You have broken the chain.")
+    victory_visual()
+    player["boss_defeated"] = True
+    player["hp"] = max(1, player_hp)
+    gain_xp(100 + player["level"]*10)
+    return True
