@@ -1,5 +1,6 @@
 """
-StillWater RPG
+StillWater RPG — Full StillWater Version (Option B) — Stat-based Combat v2
+- Stats now meaningfully affect combat:
 
 """
 
@@ -43,6 +44,7 @@ def prompt_choice(prompt, options):
 
 # -------------------------
 # Visuals & ASCII Art
+# -------------------------
 def show_camp_map():
     print("""
     STILLWATER CAMP MAP
@@ -123,6 +125,7 @@ def defeat_visual():
 
 # -------------------------
 # Classes & Abilities
+# -------------------------
 classes = {
     "Vera's Shadow": {"hp":100, "attack":12, "defense":4, "abilities":["Spite Strike","Wraith Step"]},
     "Jori's Apprentice": {"hp":90, "attack":10, "defense":3, "abilities":["Scout's Eye","Swift Hands"]},
@@ -146,6 +149,7 @@ ability_effects = {
 
 # -------------------------
 # NPCs & Camp
+# -------------------------
 npcs = {
     "Jori":{"recruitable":True,"recruited":False,"stat_bonus":"strength",
             "dialogue":["Hey, you look capable. Mind if I tag along?",
@@ -191,7 +195,7 @@ camp_locations = {
 
 # -------------------------
 # Enemies
-
+# -------------------------
 enemies = [
     {"name":"Wild Scavenger","level":(1,3),"hp_base":20},
     {"name":"Feral Miner","level":(3,5),"hp_base":30},
@@ -201,7 +205,7 @@ enemies = [
 ]
 
 # -------------------------
-# Player
+# Player (global)
 
 player = {
     "name":"",
@@ -220,7 +224,7 @@ player = {
 }
 
 # -------------------------
-# Combat math
+# Combat math: make stats matter
 
 def calculate_damage(attacker_stats, defender_stats, base, damage_type="physical"):
     """
@@ -715,7 +719,8 @@ def boss_fight():
     gain_xp(100 + player["level"]*10)
     return True
 # -------------------------
-# Final Escape
+# Final Escape (unchanged)
+# -------------------------
 def final_escape_story():
     divider()
     slow_print("*** FINAL ESCAPE INITIATED ***", 0.02)
@@ -843,7 +848,6 @@ def main():
         print("5. Boss Fight — The Warden")
         print("6. Attempt Final Escape")
         print("7. Cheat / Debug")
-        print("8. Quick Save")
         print("9. Quit Game")
         divider()
         choice = input("Choose an action: ").strip()
